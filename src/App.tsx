@@ -1,5 +1,8 @@
-import { useState } from "react";
 import "./App.css";
+import { useForm } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
+import React from "react";
 
 const RACES = {
   HUMAN: "Human",
@@ -29,105 +32,157 @@ interface FormData extends AbilityScores {
   // formaDAta успадковує AbilityScores від Ability, вони опціональні
   name: string;
   email: string;
-  age: number | null;
-  message: string;
+  age: number;
+  message?: string;
   race: Race;
 }
 
-function App() {
-  const [formData, setFormData] = useState<FormData>({
-    name: "",
-    email: "",
-    age: null,
-    message: "",
-    race: "Human",
+const schema: yup.ObjectSchema<FormData> = yup
+  .object({
+    name: yup.string().required("Ім'я обов'язкове").min(2, "Занадто коротке"),
+    email: yup
+      .string()
+      .email("Невірний формат email")
+      .required("Email обов'язковий"),
+    age: yup
+      .number()
+      .typeError("Введіть число")
+      .required()
+      .min(18, "Тільки для повнолітніх"),
+    race: yup.string<Race>().required("Оберіть расу"),
+    message: yup.string().max(200, "Максимум 200 символів").optional(),
+    intelligence: yup.number().min(0).max(10).optional(),
+    speed: yup.number().min(0).max(10).optional(),
+    stealth: yup.number().min(0).max(10).optional(),
+    strength: yup.number().min(0).max(10).optional(),
+    shields: yup.number().min(0).max(10).optional(),
+    movement: yup.number().min(0).max(10).optional(),
+    // Динамічні поля AbilityScores (Yup дозволяє перевіряти суму)
+  })
+  .test("total-power", "Занадто потужно!", (values) => {
+    // Тут ми можемо вирахувати суму прямо в схемі
+    const abilities: Ability[] = [
+      "intelligence",
+      "speed",
+      "stealth",
+      "strength",
+      "shields",
+      "movement",
+    ] as const;
+    const sum = abilities.reduce(
+      (acc, key) => acc + (Number(values[key as keyof typeof values]) || 0),
+      0
+    );
+    return sum <= 20;
   });
 
-  const RACE_MAP: Record<Race, Ability[] | null> = {
-    //// Record<ТипКлючів, ТипЗначень>
-    //  Elf: ["magic"], //  ERROR: "magic" не є Ability
-    Human: null,
-    Elf: ["intelligence", "speed", "stealth"],
-    Dwarf: ["strength", "shields", "movement"],
-    Goblin: null,
-    Orc: null,
-    Vampire: ["shields"],
-  };
+const RACE_MAP: Record<Race, Ability[] | null> = {
+  //// Record<ТипКлючів, ТипЗначень>
+  //  Elf: ["magic"], //  ERROR: "magic" не є Ability
+  Human: null,
+  Elf: ["intelligence", "speed", "stealth"],
+  Dwarf: ["strength", "shields", "movement"],
+  Goblin: null,
+  Orc: null,
+  Vampire: ["shields"],
+};
 
-  const raceSpecificsInputs = RACE_MAP[formData.race]; // замість if / else
-
-  const handleChange = (
-    event: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
-  ) => {
-    const { name, value } = event.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === "age" ? (value === "" ? null : Number(value)) : value, // name = 'name' : 'Oleg', name = 'email' : 'sad@gmail'...
-    }));
-  };
-  console.log(formData);
-
-  const totalPower =
-    raceSpecificsInputs?.reduce((acc, ability) => {
-      const value = Number(formData[ability]) || 0;
-      return acc + value;
-    }, 0) || 0;
-
-  const handleSubmit = (event: React.FormEvent) => {
-    // 1. Зупиняємо перезавантаження сторінки (стандартна поведінка браузера)
-    event.preventDefault();
-
-    // 2. Валідація: якщо сума занадто велика, не відправляємо
-    if (totalPower > 20) {
-      alert("Персонаж занадто потужний! Максимум 20 очок.");
-      return;
-    }
-
-    setFormData({
+function App() {
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isValid },
+    reset,
+    setValue,
+  } = useForm<FormData>({
+    resolver: yupResolver(schema),
+    defaultValues: {
       name: "",
       email: "",
-      age: null,
+      age: undefined,
       message: "",
       race: "Human",
-    });
+      intelligence: 0,
+      speed: 0,
+      stealth: 0,
+      strength: 0,
+      shields: 0,
+      movement: 0,
+    },
+    mode: "onChange", // валідація при кожній зміні
+  });
 
-    // 3. Логіка відправки (наприклад, вивід у консоль або запит на сервер)
-    console.log("Дані форми відправлено:", formData);
-    alert(`Персонаж ${formData.name} створений!`);
+  const currentRace = watch("race");
+  const allFields = watch();
+
+  const previousRaceRef = React.useRef<Race>(currentRace);
+
+  React.useEffect(() => {
+    if (previousRaceRef.current !== currentRace) {
+      const allAbilities: Ability[] = [
+        "intelligence",
+        "speed",
+        "stealth",
+        "strength",
+        "shields",
+        "movement",
+      ];
+
+      allAbilities.forEach((ability) => {
+        setValue(ability, 0);
+      });
+
+      previousRaceRef.current = currentRace;
+    }
+  }, [currentRace, setValue]);
+
+  const abilities: Ability[] = [
+    "intelligence",
+    "speed",
+    "stealth",
+    "strength",
+    "shields",
+    "movement",
+  ];
+
+  const totalPower = abilities.reduce(
+    (acc, key) => acc + (Number(allFields[key]) || 0),
+    0
+  );
+
+  const onSubmit = (data: FormData) => {
+    console.log("Відправлено через RHF:", data);
+    alert(`Персонаж ${data.name} створений!`);
+    reset(); // очищення форми
   };
+
+  const raceSpecificsInputs = RACE_MAP[currentRace]; // замість if / else
 
   return (
     <div className="App">
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit(onSubmit)}>
         <label>
           name:
-          <input name="name" value={formData.name} onChange={handleChange} />
+          <input {...register("name")} />
+          <p className="error">{errors.name?.message}</p>
         </label>
 
         <label>
           email :
-          <input name="email" value={formData.email} onChange={handleChange} />
+          <input {...register("email")} />
+          <p className="error">{errors.email?.message}</p>
         </label>
 
         <label>
           age :
-          <input
-            type="number"
-            value={formData.age ?? ""}
-            name="age"
-            onChange={handleChange}
-          />
-          {formData.age !== null && formData.age < 18 && (
-            <span className="error">Тільки для повнолітніх</span>
-          )}
+          <input type="number" {...register("age")} />
+          <p className="error">{errors.age?.message}</p>
         </label>
 
         <label>
           race:
-          <select name="race" onChange={handleChange} value={formData.race}>
+          <select {...register("race")}>
             {Object.values(RACES).map((race) => (
               <option key={race} value={race}>
                 {race}
@@ -142,14 +197,12 @@ function App() {
           )}
           {raceSpecificsInputs?.map((ability) => (
             <label key={ability}>
-              {ability}: <strong>{formData[ability] || 0}</strong>
+              {ability}: <strong>{allFields[ability] || 0}</strong>
               <input
                 type="range"
                 min="0"
                 max="10"
-                value={formData[ability] || 0}
-                onChange={handleChange}
-                name={ability}
+                {...register(ability, { valueAsNumber: true })}
               />
             </label>
           ))}
@@ -158,31 +211,18 @@ function App() {
         <div className="power-counter">
           Total Power: {totalPower} / 20
           {totalPower > 20 && (
-            <span className="error" style={{ marginLeft: "10px" }}>
-              ⚠️ Занадто потужно!
-            </span>
+            <span className="error">⚠️ Занадто потужно!</span>
           )}
         </div>
 
         <label>
           message :
-          <textarea
-            name="message"
-            onChange={handleChange}
-            value={formData.message}
-          />
+          <textarea {...register("message")} />
+          {errors.message && <p className="error">{errors.message.message}</p>}
         </label>
 
         <div className="actions">
-          <button
-            type="submit"
-            disabled={
-              totalPower > 20 ||
-              !formData.name ||
-              !formData.age ||
-              !formData.email
-            }
-          >
+          <button type="submit" disabled={!isValid}>
             submit
           </button>
         </div>
