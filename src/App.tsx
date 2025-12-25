@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import React from "react";
+import { InputComponent } from "./components/InputComponent";
+import TextAreaComponent from "./components/TextAreaComponent";
 
 const RACES = {
   HUMAN: "Human",
@@ -28,7 +30,7 @@ type AbilityScores = {
   [K in Ability]?: number; // // [K in Ability] - це MAPPED TYPE (проходимося по кожному значенню) intelligence, speed....
 };
 
-interface FormData extends AbilityScores {
+export interface FormData extends AbilityScores {
   // formaDAta успадковує AbilityScores від Ability, вони опціональні
   name: string;
   email: string;
@@ -36,6 +38,15 @@ interface FormData extends AbilityScores {
   message?: string;
   race: Race;
 }
+
+const abilities: Ability[] = [
+  "intelligence",
+  "speed",
+  "stealth",
+  "strength",
+  "shields",
+  "movement",
+] as const;
 
 const schema: yup.ObjectSchema<FormData> = yup
   .object({
@@ -61,14 +72,7 @@ const schema: yup.ObjectSchema<FormData> = yup
   })
   .test("total-power", "Занадто потужно!", (values) => {
     // Тут ми можемо вирахувати суму прямо в схемі
-    const abilities: Ability[] = [
-      "intelligence",
-      "speed",
-      "stealth",
-      "strength",
-      "shields",
-      "movement",
-    ] as const;
+
     const sum = abilities.reduce(
       (acc, key) => acc + (Number(values[key as keyof typeof values]) || 0),
       0
@@ -114,37 +118,21 @@ function App() {
   });
 
   const currentRace = watch("race");
+  // currentRace = "Human" | "Elf" | "Dwarf" ...
+  // Оновлюється тільки коли "race" змінюється
   const allFields = watch();
 
-  const previousRaceRef = React.useRef<Race>(currentRace);
+  const previousRaceRef = React.useRef<Race>(currentRace); // не відбувається лишній ререндер, як при звичайному useState
 
   React.useEffect(() => {
     if (previousRaceRef.current !== currentRace) {
-      const allAbilities: Ability[] = [
-        "intelligence",
-        "speed",
-        "stealth",
-        "strength",
-        "shields",
-        "movement",
-      ];
-
-      allAbilities.forEach((ability) => {
+      abilities.forEach((ability) => {
         setValue(ability, 0);
       });
 
       previousRaceRef.current = currentRace;
     }
   }, [currentRace, setValue]);
-
-  const abilities: Ability[] = [
-    "intelligence",
-    "speed",
-    "stealth",
-    "strength",
-    "shields",
-    "movement",
-  ];
 
   const totalPower = abilities.reduce(
     (acc, key) => acc + (Number(allFields[key]) || 0),
@@ -157,28 +145,43 @@ function App() {
     reset(); // очищення форми
   };
 
-  const raceSpecificsInputs = RACE_MAP[currentRace]; // замість if / else
+  const raceSpecificsInputs = RACE_MAP[currentRace]; // замість if / else ->[ELF] raceSpecificsInputs = ["intelligence", "speed", "stealth"] | [DWARF] raceSpecificsInputs = ["strength", "shields", "movement"]
+  // if (currentRace === "Elf") {
+  //   raceSpecificsInputs = ["intelligence", "speed", "stealth"];
+  // } else if (currentRace === "Dwarf") {
+  //   raceSpecificsInputs = ["strength", "shields", "movement"];
+  // } else if (currentRace === "Vampire") {
+  //   raceSpecificsInputs = ["shields"];
+  // } else {
+  //   raceSpecificsInputs = null;
+  // }
 
   return (
     <div className="App">
       <form onSubmit={handleSubmit(onSubmit)}>
-        <label>
-          name:
-          <input {...register("name")} />
-          <p className="error">{errors.name?.message}</p>
-        </label>
+        <InputComponent
+          label="name"
+          name="name"
+          register={register}
+          errors={errors}
+          type="text"
+        />
 
-        <label>
-          email :
-          <input {...register("email")} />
-          <p className="error">{errors.email?.message}</p>
-        </label>
+        <InputComponent
+          label="email"
+          name="email"
+          register={register}
+          errors={errors}
+          type="text"
+        />
 
-        <label>
-          age :
-          <input type="number" {...register("age")} />
-          <p className="error">{errors.age?.message}</p>
-        </label>
+        <InputComponent
+          label="age"
+          name="age"
+          register={register}
+          errors={errors}
+          type="number"
+        />
 
         <label>
           race:
@@ -215,11 +218,13 @@ function App() {
           )}
         </div>
 
-        <label>
-          message :
-          <textarea {...register("message")} />
-          {errors.message && <p className="error">{errors.message.message}</p>}
-        </label>
+        <TextAreaComponent
+          label="message"
+          name="message"
+          register={register}
+          errors={errors}
+          placeholder="Type some message..."
+        />
 
         <div className="actions">
           <button type="submit" disabled={!isValid}>
